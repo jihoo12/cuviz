@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cubical Type Theory — AST Visualizer</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  background: #0a0a0f;
+  color: #e0e0e0;
+  overflow: hidden;
+  height: 100vh;
+}
+
+#header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 48px;
+  background: #12121a;
+  border-bottom: 1px solid #2a2a3a;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  z-index: 100;
+  gap: 12px;
+}
+
+#header h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #7aa2f7;
+  white-space: nowrap;
+}
+
+#header .sep { color: #3a3a4a; }
+
+#file-input { display: none; }
+
+.btn {
+  background: #1a1a2e;
+  border: 1px solid #3a3a5a;
+  color: #a0a0c0;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.btn:hover { background: #2a2a4e; color: #e0e0ff; border-color: #5a5a8a; }
+.btn.active { background: #2a2a4e; color: #7aa2f7; border-color: #7aa2f7; }
+
+#tab-bar {
+  display: none;
+  gap: 0;
+}
+
+.tab {
+  background: transparent;
+  border: 1px solid #3a3a5a;
+  border-bottom: none;
+  color: #6a6a8a;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  margin-right: -1px;
+  border-radius: 4px 4px 0 0;
+}
+.tab:hover { color: #a0a0c0; }
+.tab.active { background: #0a0a0f; color: #7aa2f7; border-color: #5a5a8a; }
+
+#def-name {
+  font-size: 12px;
+  color: #bb9af7;
+  white-space: nowrap;
+}
+
+#drop-zone {
+  position: fixed;
+  top: 48px; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+#drop-hint {
+  text-align: center;
+  color: #4a4a6a;
+  font-size: 14px;
+}
+#drop-hint .big { font-size: 48px; margin-bottom: 16px; }
+#drop-hint code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; color: #7aa2f7; }
+#drop-hint .sub { font-size: 12px; margin-top: 12px; color: #3a3a5a; }
+
+#tree-container {
+  position: fixed;
+  top: 48px; left: 0; right: 0; bottom: 0;
+  display: none;
+}
+
+svg { width: 100%; height: 100%; }
+
+.link {
+  fill: none;
+  stroke: #2a2a4a;
+  stroke-width: 1.5;
+  stroke-opacity: 0.6;
+}
+
+.node circle {
+  stroke-width: 2;
+  cursor: pointer;
+  transition: r 0.15s;
+}
+.node circle:hover { filter: brightness(1.3); }
+
+.node text {
+  font-size: 11px;
+  fill: #c0c0e0;
+  pointer-events: none;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+#info-panel {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  background: #12121aee;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 11px;
+  color: #8080a0;
+  max-width: 360px;
+  z-index: 100;
+}
+#info-panel .label { color: #5a5a7a; margin-bottom: 2px; }
+#info-panel .value { color: #a0a0c0; word-break: break-all; }
+
+#zoom-info {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  font-size: 11px;
+  color: #3a3a5a;
+  z-index: 100;
+}
+
+/* Color palette for term kinds */
+.kind-Var       { fill: #9ece6a; }
+.kind-App       { fill: #ff9e64; }
+.kind-Abs       { fill: #7aa2f7; }
+.kind-Univ      { fill: #bb9af7; }
+.kind-IntervalTy { fill: #e0af68; }
+.kind-Interval  { fill: #e0af68; }
+.kind-Cube      { fill: #e0af68; }
+.kind-Pi        { fill: #7dcfff; }
+.kind-Path      { fill: #f7768e; }
+.kind-PLam      { fill: #ff7a93; }
+.kind-PApp      { fill: #ff9e64; }
+.kind-HComp     { fill: #73daca; }
+.kind-Equiv     { fill: #bb9af7; }
+.kind-MkEquiv   { fill: #bb9af7; }
+.kind-EquivFwd  { fill: #bb9af7; }
+.kind-Ua        { fill: #bb9af7; }
+.kind-Transport { fill: #73daca; }
+.kind-Glue      { fill: #7dcfff; }
+.kind-GlueElem  { fill: #7dcfff; }
+.kind-Unglue    { fill: #7dcfff; }
+.kind-Sigma     { fill: #7dcfff; }
+.kind-Pair      { fill: #ff9e64; }
+.kind-Fst       { fill: #ff9e64; }
+.kind-Snd       { fill: #ff9e64; }
+.kind-Data      { fill: #c0caf5; }
+.kind-Con       { fill: #9ece6a; }
+.kind-PCon      { fill: #ff7a93; }
+.kind-Elim      { fill: #f7768e; }
+.kind-Case      { fill: #f7768e; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Cubical AST</h1>
+  <span class="sep">|</span>
+  <button class="btn" onclick="document.getElementById('file-input').click()">Open JSON</button>
+  <div id="tab-bar">
+    <button class="tab active" data-view="normalized" onclick="switchView('normalized')">normalized</button>
+    <button class="tab" data-view="raw" onclick="switchView('raw')">raw</button>
+    <button class="tab" data-view="type" onclick="switchView('type')">type</button>
+  </div>
+  <span class="sep" id="tab-sep" style="display:none">|</span>
+  <span id="def-name"></span>
+  <div style="flex:1"></div>
+  <button class="btn" id="btn-fit" onclick="fitView()" style="display:none">Fit (F)</button>
+  <button class="btn" id="btn-expand" onclick="expandAll()" style="display:none">Expand (E)</button>
+  <button class="btn" id="btn-collapse" onclick="collapseAll()" style="display:none">Collapse (C)</button>
+  <span id="file-name" style="font-size:11px;color:#4a4a6a;"></span>
+</div>
+
+<input type="file" id="file-input" accept=".json">
+
+<div id="drop-zone">
+  <div id="drop-hint">
+    <div class="big">⬡</div>
+    Drop a <code>.json</code> AST file here<br>
+    or click <strong>Open JSON</strong> above
+    <div class="sub">
+      cargo run --bin cubical-viz -- file.uwuc &gt; term.json
+    </div>
+  </div>
+</div>
+
+<div id="tree-container">
+  <svg id="svg"></svg>
+</div>
+
+<div id="info-panel" style="display:none">
+  <div class="label">Hover a node for details</div>
+</div>
+
+<div id="zoom-info"></div>
+
+<script>
+// ── Color mapping ──
+const kindColor = {
+  Var: '#9ece6a', App: '#ff9e64', Abs: '#7aa2f7', Univ: '#bb9af7',
+  IntervalTy: '#e0af68', Interval: '#e0af68', Cube: '#e0af68',
+  Pi: '#7dcfff', Path: '#f7768e', PLam: '#ff7a93', PApp: '#ff9e64',
+  HComp: '#73daca', Equiv: '#bb9af7', MkEquiv: '#bb9af7',
+  EquivFwd: '#bb9af7', Ua: '#bb9af7', Transport: '#73daca',
+  Glue: '#7dcfff', GlueElem: '#7dcfff', Unglue: '#7dcfff',
+  Sigma: '#7dcfff', Pair: '#ff9e64', Fst: '#ff9e64', Snd: '#ff9e64',
+  Data: '#c0caf5', Con: '#9ece6a', PCon: '#ff7a93',
+  Elim: '#f7768e', Case: '#f7768e'
+};
+
+const colorOf = kind => kindColor[kind] || '#6a6a8a';
+
+// ── SVG setup ──
+const svg = d3.select('#svg');
+const container = svg.append('g');
+const linkGroup = container.append('g').attr('class', 'links');
+const nodeGroup = container.append('g').attr('class', 'nodes');
+
+const zoomBehavior = d3.zoom()
+  .scaleExtent([0.05, 5])
+  .on('zoom', e => {
+    container.attr('transform', e.transform);
+    d3.select('#zoom-info').text(`×${e.transform.k.toFixed(2)}`);
+  });
+svg.call(zoomBehavior);
+
+let root = null;
+let currentData = null;   // full parsed JSON
+let currentView = null;    // 'raw' | 'normalized' | 'type'
+const duration = 350;
+
+// ── Detect JSON format ──
+function isMultiTree(data) {
+  return data && typeof data === 'object' && 'definition' in data;
+}
+
+function showUI(multi) {
+  d3.select('#drop-zone').style('display', 'none');
+  d3.select('#tree-container').style('display', 'block');
+  d3.select('#btn-fit').style('display', 'inline-block');
+  d3.select('#btn-expand').style('display', 'inline-block');
+  d3.select('#btn-collapse').style('display', 'inline-block');
+  d3.select('#info-panel').style('display', 'block');
+  if (multi) {
+    d3.select('#tab-bar').style('display', 'flex');
+    d3.select('#tab-sep').style('display', 'inline');
+    d3.select('#def-name').style('display', 'inline');
+  }
+}
+
+function clearTree() {
+  linkGroup.selectAll('*').remove();
+  nodeGroup.selectAll('*').remove();
+  root = null;
+}
+
+// ── Switch view (type/raw/normalized) ──
+function switchView(view) {
+  if (!currentData || !isMultiTree(currentData)) return;
+  currentView = view;
+  d3.selectAll('.tab').classed('active', false);
+  d3.select(`.tab[data-view="${view}"]`).classed('active', true);
+  clearTree();
+  loadTreeData(currentData[view]);
+}
+
+// ── Load ──
+function loadTree(data) {
+  currentData = data;
+  if (isMultiTree(data)) {
+    d3.select('#def-name').text(data.definition || '');
+    // Show all three tabs
+    const views = ['normalized', 'raw', 'type'].filter(v => data[v]);
+    d3.selectAll('.tab').style('display', v => {
+      return data[v] ? 'inline-block' : 'none';
+    });
+    showUI(true);
+    // Default to normalized
+    currentView = views.includes('normalized') ? 'normalized' : views[0];
+    d3.select(`.tab[data-view="${currentView}"]`).classed('active', true);
+    clearTree();
+    loadTreeData(data[currentView]);
+  } else {
+    // Bare tree — no tabs
+    showUI(false);
+    currentView = null;
+    clearTree();
+    loadTreeData(data);
+  }
+}
+
+function loadTreeData(treeData) {
+  root = d3.hierarchy(treeData);
+  root.x0 = 0;
+  root.y0 = 0;
+
+  // First level expanded, deeper collapsed
+  if (root.children) {
+    root.children.forEach(c => {
+      collapse(c);
+    });
+  }
+
+  update(root);
+  setTimeout(fitView, 100);
+}
+
+function collapse(d) {
+  if (d.children) {
+    d._children = d.children;
+    d._children.forEach(collapse);
+    d.children = null;
+  }
+}
+
+function update(source) {
+  if (!root) return;
+
+  const treeLayout = d3.tree()
+    .nodeSize([28, 200])
+    .separation((a, b) => a.parent === b.parent ? 1 : 1.3);
+
+  treeLayout(root);
+
+  const nodes = root.descendants();
+  const links = root.links();
+
+  // ── Links ──
+  const link = linkGroup.selectAll('.link').data(links, d => d.target.data.id);
+
+  const linkEnter = link.enter()
+    .append('path')
+    .attr('class', 'link')
+    .attr('d', () => {
+      const o = { x: source.x0, y: source.y0 };
+      return diagonal(o, o);
+    });
+
+  linkEnter.merge(link).transition().duration(duration)
+    .attr('d', d => diagonal(d.source, d.target));
+
+  link.exit().transition().duration(duration)
+    .attr('d', () => {
+      const o = { x: source.x, y: source.y };
+      return diagonal(o, o);
+    }).remove();
+
+  // ── Nodes ──
+  const node = nodeGroup.selectAll('.node').data(nodes, d => d.data.id);
+
+  const nodeEnter = node.enter()
+    .append('g')
+    .attr('class', 'node')
+    .attr('transform', `translate(${source.y0},${source.x0})`)
+    .on('click', (e, d) => {
+      e.stopPropagation();
+      if (d.children) {
+        d._children = d.children;
+        d.children = null;
+      } else if (d._children) {
+        d.children = d._children;
+        d._children = null;
+      }
+      update(d);
+    })
+    .on('mouseenter', (e, d) => showInfo(d.data))
+    .on('mouseleave', () => hideInfo());
+
+  nodeEnter.append('circle')
+    .attr('r', 0)
+    .attr('fill', d => colorOf(d.data.kind))
+    .attr('stroke', d => d3.color(colorOf(d.data.kind)).darker(0.5));
+
+  nodeEnter.append('text')
+    .attr('dy', '0.35em')
+    .attr('x', 0)
+    .attr('text-anchor', 'middle')
+    .text('')
+    .attr('fill', d => {
+      const bright = ['#9ece6a','#ff9e64','#ff7a93'];
+      return bright.includes(colorOf(d.data.kind)) ? '#0a0a0f' : '#c0c0e0';
+    });
+
+  // Badge for collapsed children count
+  nodeEnter.append('text')
+    .attr('class', 'badge')
+    .attr('dy', '-0.7em')
+    .attr('x', 0)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#5a5a7a')
+    .attr('font-size', '9px')
+    .text('');
+
+  const nodeMerge = nodeEnter.merge(node);
+
+  nodeMerge.transition().duration(duration)
+    .attr('transform', d => `translate(${d.y},${d.x})`);
+
+  nodeMerge.select('circle')
+    .transition().duration(duration)
+    .attr('r', d => d._children ? 9 : 6)
+    .attr('fill', d => colorOf(d.data.kind));
+
+  // Position text above/below nodes instead of left/right to avoid overlap
+  nodeMerge.select('text:not(.badge)')
+    .attr('dy', d => d._children ? '-1.1em' : (d.children ? '1.4em' : '-1.1em'))
+    .attr('text-anchor', 'middle')
+    .text(d => d.data.label || d.data.kind);
+
+  nodeMerge.select('.badge')
+    .text(d => d._children ? `${d._children.length}` : '');
+
+  node.exit().transition().duration(duration)
+    .attr('transform', `translate(${source.y},${source.x})`)
+    .remove()
+    .select('circle').attr('r', 0);
+}
+
+function diagonal(s, d) {
+  return `M ${s.y} ${s.x}
+          C ${(s.y + d.y) / 2} ${s.x},
+            ${(s.y + d.y) / 2} ${d.x},
+            ${d.y} ${d.x}`;
+}
+
+function fitView() {
+  const bounds = container.node().getBBox();
+  if (bounds.width === 0 || bounds.height === 0) return;
+  const svgEl = svg.node();
+  const w = svgEl.clientWidth;
+  const h = svgEl.clientHeight;
+  const padding = 80;
+
+  const scale = Math.min(
+    (w - padding * 2) / bounds.width,
+    (h - padding * 2) / bounds.height,
+    2.5
+  );
+  const tx = w / 2 - (bounds.x + bounds.width / 2) * scale;
+  const ty = h / 2 - (bounds.y + bounds.height / 2) * scale;
+
+  svg.transition().duration(500)
+    .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+}
+
+function expandAll() {
+  if (!root) return;
+  root.each(d => {
+    if (d._children) { d.children = d._children; d._children = null; }
+  });
+  update(root);
+  setTimeout(fitView, 400);
+}
+
+function collapseAll() {
+  if (!root) return;
+  root.each(d => {
+    if (d.children && d.depth > 0) { d._children = d.children; d.children = null; }
+  });
+  update(root);
+  setTimeout(fitView, 400);
+}
+
+function showInfo(data) {
+  const panel = d3.select('#info-panel');
+  panel.html(`
+    <div class="label">Kind</div>
+    <div class="value" style="color:${colorOf(data.kind)}">${data.kind}</div>
+    <div class="label" style="margin-top:6px">Label</div>
+    <div class="value">${data.label || '—'}</div>
+    <div class="label" style="margin-top:6px">Node ID</div>
+    <div class="value">#${data.id}</div>
+  `);
+}
+
+function hideInfo() {
+  d3.select('#info-panel').html('<div class="label">Hover a node for details</div>');
+}
+
+// ── File handling ──
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  readJson(file);
+});
+
+function readJson(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      d3.select('#file-name').text(file.name);
+      loadTree(data);
+    } catch (err) {
+      alert('Invalid JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── Drag & drop ──
+document.body.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.json')) readJson(file);
+});
+
+// ── Keyboard shortcuts ──
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'f' || e.key === 'F') fitView();
+  if (e.key === 'e' || e.key === 'E') expandAll();
+  if (e.key === 'c' || e.key === 'C') collapseAll();
+  if (e.key === '1') switchView('normalized');
+  if (e.key === '2') switchView('raw');
+  if (e.key === '3') switchView('type');
+});
+</script>
+</body>
+</html>

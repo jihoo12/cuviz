@@ -1,1 +1,1 @@
-it is cubical backend used in hokkaido language
+cubical type theory visualize tool

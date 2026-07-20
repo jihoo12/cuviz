@@ -1,0 +1,9 @@
+data Nat = | zero : Nat | suc : Nat -> Nat
+
+def id : (A : U0) -> A -> A = \A x. x
+
+def refl : (A : U0) -> (x : A) -> Path A x x = \A x. <i> x
+
+def plus : Nat -> Nat -> Nat = \m n. elim (\_. Nat) { | zero => n | suc m' => suc (plus m' n) } m
+
+def main : Nat = plus (suc (suc zero)) (suc (suc (suc zero)))
