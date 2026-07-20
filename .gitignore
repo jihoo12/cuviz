@@ -2,3 +2,4 @@
 # Added by code-review-graph
 .code-review-graph/
 .venv
+viz/node_modules

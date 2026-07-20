@@ -1,0 +1,10 @@
+{
+  "definition": "refl",
+  "rawText": "λA. λx. ⟨i⟩ x",
+  "typeText": "Π(A:U0). Π(x:A). Path A x x",
+  "normalizedText": "λA. λx. ⟨i⟩ x",
+  "trace": [],
+  "type": {"id":8,"kind":"Pi","label":"Π(A: _). _","children":[{"id":1,"kind":"Univ","label":"U0","children":[]},{"id":7,"kind":"Pi","label":"Π(x: _). _","children":[{"id":2,"kind":"Var","label":"#0","children":[]},{"id":6,"kind":"Path","label":"Path _ _ _","children":[{"id":3,"kind":"Var","label":"#1","children":[]},{"id":4,"kind":"Var","label":"#0","children":[]},{"id":5,"kind":"Var","label":"#0","children":[]}]}]}]},
+  "raw": {"id":4,"kind":"Abs","label":"λA","children":[{"id":3,"kind":"Abs","label":"λx","children":[{"id":2,"kind":"PLam","label":"⟨i⟩ _","children":[{"id":1,"kind":"Var","label":"#1","children":[]}]}]}]},
+  "normalized": {"id":4,"kind":"Abs","label":"λA","children":[{"id":3,"kind":"Abs","label":"λx","children":[{"id":2,"kind":"PLam","label":"⟨i⟩ _","children":[{"id":1,"kind":"Var","label":"#1","children":[]}]}]}]}
+}
