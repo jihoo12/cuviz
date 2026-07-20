@@ -1,4 +1,5 @@
-use crate::cubical::syntax::{Term, nat_to_int, show_term};
+use crate::cubical::nbe::ReductionStep;
+use crate::cubical::syntax::{Name, Term, nat_to_int, show_term};
 use crate::cubical::interval::{I, DNF};
 
 /// AST node counter for generating unique ids.
@@ -264,4 +265,35 @@ pub fn term_to_json(t: &Term) -> JsVal {
 pub fn export_ast_json(t: &Term) -> String {
     reset_ast_ids();
     term_to_ast_json(t).to_string()
+}
+
+/// Export a reduction trace as a JSON array.
+pub fn export_trace_json(steps: &[ReductionStep]) -> String {
+    let items: Vec<String> = steps
+        .iter()
+        .map(|s| {
+            format!(
+                r#"{{"rule":{},"input":{},"output":{}}}"#,
+                JsVal::Str(s.rule.clone()).to_string(),
+                JsVal::Str(s.input.clone()).to_string(),
+                JsVal::Str(s.output.clone()).to_string(),
+            )
+        })
+        .collect();
+    format!("[{}]", items.join(","))
+}
+
+/// Export a term with its pretty-printed text.
+pub fn export_ast_json_with_text(t: &Term, global_names: &[Name]) -> String {
+    reset_ast_ids();
+    let text = show_term(global_names, t);
+    let ast = term_to_ast_json(t);
+    // Wrap the AST node with the text field
+    match ast {
+        JsVal::Obj(mut pairs) => {
+            pairs.push(kv("text", JsVal::Str(text)));
+            JsVal::Obj(pairs).to_string()
+        }
+        other => other.to_string(),
+    }
 }

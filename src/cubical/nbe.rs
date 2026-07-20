@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::cubical::interval::{DNF, I, dnf_bot, dnf_top, eval_interval};
-use crate::cubical::syntax::{ElimCase, Level, Name, Term, beta, equiv_dom, is_bot_dnf, is_top_dnf, max_var, shift, subst};
+use crate::cubical::syntax::{ElimCase, Level, Name, Term, beta, equiv_dom, is_bot_dnf, is_top_dnf, max_var, shift, show_term, subst};
 
 pub type Env = Vec<Value>;
 
@@ -13,6 +13,46 @@ pub type Env = Vec<Value>;
 /// All closures created during evaluation share the same `Globals` so that
 /// recursive self-references resolve correctly after placeholder replacement.
 pub type Globals = Rc<RefCell<Vec<Value>>>;
+
+// ── Reduction trace infrastructure ──
+
+/// A single reduction step recorded during normalization.
+#[derive(Debug, Clone)]
+pub struct ReductionStep {
+    pub rule: String,
+    pub input: String,
+    pub output: String,
+}
+
+thread_local! {
+    static REDUCTION_TRACE: std::cell::RefCell<Vec<ReductionStep>> = std::cell::RefCell::new(Vec::new());
+}
+
+pub static TRACE_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn start_trace() {
+    TRACE_ACTIVE.store(true, std::sync::atomic::Ordering::Release);
+    REDUCTION_TRACE.with(|t| t.borrow_mut().clear());
+}
+
+pub fn stop_trace() -> Vec<ReductionStep> {
+    TRACE_ACTIVE.store(false, std::sync::atomic::Ordering::Release);
+    REDUCTION_TRACE.with(|t| t.borrow_mut().split_off(0))
+}
+
+fn record_step(rule: String, input: String, output: String) {
+    if TRACE_ACTIVE.load(std::sync::atomic::Ordering::Acquire) {
+        REDUCTION_TRACE.with(|t| t.borrow_mut().push(ReductionStep { rule, input, output }));
+    }
+}
+
+fn value_str(globals: &Globals, global_offset: usize, v: &Value) -> String {
+    if !TRACE_ACTIVE.load(std::sync::atomic::Ordering::Acquire) {
+        return String::new();
+    }
+    let term = quote(0, globals, global_offset, v.clone());
+    show_term(&[], &term)
+}
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -130,6 +170,7 @@ pub fn eval_nbe(env: &[Value], globals: &Globals, global_offset: usize, t: &Term
             }
         }
         Term::TApp(f, a) => do_apply(
+            globals, global_offset,
             eval_nbe(env, globals, global_offset, f),
             eval_nbe(env, globals, global_offset, a),
         ),
@@ -171,10 +212,12 @@ pub fn eval_nbe(env: &[Value], globals: &Globals, global_offset: usize, t: &Term
             },
         ),
         Term::PApp(p, r) => do_papp(
+            globals, global_offset,
             eval_nbe(env, globals, global_offset, p),
             eval_nbe(env, globals, global_offset, r),
         ),
         Term::THComp(a, phi, tube, base) => do_hcomp(
+            globals, global_offset,
             eval_nbe(env, globals, global_offset, a),
             value_to_dnf(eval_nbe(env, globals, global_offset, phi)),
             eval_nbe(env, globals, global_offset, tube),
@@ -193,6 +236,7 @@ pub fn eval_nbe(env: &[Value], globals: &Globals, global_offset: usize, t: &Term
             Box::new(eval_nbe(env, globals, global_offset, eps)),
         ),
         Term::TEquivFwd(e, x) => do_equiv_fwd(
+            globals, global_offset,
             eval_nbe(env, globals, global_offset, e),
             eval_nbe(env, globals, global_offset, x),
         ),
@@ -246,7 +290,7 @@ pub fn eval_nbe(env: &[Value], globals: &Globals, global_offset: usize, t: &Term
             let te = eval_nbe(env, globals, global_offset, te);
             let g_val = eval_nbe(env, globals, global_offset, g);
             if phi == dnf_top() {
-                do_equiv_fwd(te, g_val)
+                do_equiv_fwd(globals, global_offset, te, g_val)
             } else if phi == dnf_bot() {
                 g_val
             } else {
@@ -270,8 +314,8 @@ pub fn eval_nbe(env: &[Value], globals: &Globals, global_offset: usize, t: &Term
             Box::new(eval_nbe(env, globals, global_offset, a)),
             Box::new(eval_nbe(env, globals, global_offset, b)),
         ),
-        Term::TFst(p) => do_fst(eval_nbe(env, globals, global_offset, p)),
-        Term::TSnd(p) => do_snd(eval_nbe(env, globals, global_offset, p)),
+        Term::TFst(p) => do_fst(globals, global_offset, eval_nbe(env, globals, global_offset, p)),
+        Term::TSnd(p) => do_snd(globals, global_offset, eval_nbe(env, globals, global_offset, p)),
         Term::TData(d) => Value::VData(d.clone()),
         Term::TCon(data, con, args) => Value::VCon(
             data.clone(),
@@ -297,23 +341,35 @@ pub fn eval_nbe(env: &[Value], globals: &Globals, global_offset: usize, t: &Term
     }
 }
 
-pub fn do_apply(f: Value, a: Value) -> Value {
+pub fn do_apply(globals: &Globals, global_offset: usize, f: Value, a: Value) -> Value {
     match f {
-        Value::VLam(_, clos) => clos.apply(a),
+        Value::VLam(ref x, ref clos) => {
+            let result = clos.apply(a);
+            record_step("beta".into(), format!("(λ{}. _) _", x), value_str(globals, global_offset, &result));
+            result
+        }
         Value::VNeutral(n) => Value::VNeutral(Neutral::NApp(Box::new(n), Box::new(a))),
         other => Value::VApp(Box::new(other), Box::new(a)),
     }
 }
 
-pub fn do_papp(p: Value, r: Value) -> Value {
+pub fn do_papp(globals: &Globals, global_offset: usize, p: Value, r: Value) -> Value {
     if let Some(i) = value_to_endpoint(&r)
         && let Value::VPLam(_, clos) = p {
-            return clos.apply_i(i);
+            let end_lbl = if i == I::I0 { "0" } else { "1" };
+            let result = clos.apply_i(i);
+            record_step("path-app".into(), format!("_ @ {}", end_lbl), value_str(globals, global_offset, &result));
+            return result;
         }
 
     match p {
         Value::VPLam(_, clos) => match r {
-            Value::VInterval(i) => clos.apply_i(i),
+            Value::VInterval(ref i) => {
+                let end_lbl = if *i == I::I0 { "0".to_string() } else if *i == I::I1 { "1".to_string() } else { format!("{}", i) };
+                let result = clos.apply_i(i.clone());
+                record_step("path-app".into(), format!("_ @ {}", end_lbl), value_str(globals, global_offset, &result));
+                result
+            }
             Value::VIntervalVar(level) => clos.apply_i_var(level),
             other => Value::VPApp(
                 Box::new(Value::VPLam("_".to_string(), clos)),
@@ -325,17 +381,23 @@ pub fn do_papp(p: Value, r: Value) -> Value {
     }
 }
 
-pub fn do_fst(p: Value) -> Value {
+pub fn do_fst(globals: &Globals, global_offset: usize, p: Value) -> Value {
     match p {
-        Value::VPair(a, _) => *a,
+        Value::VPair(a, _) => {
+            record_step("fst-pair".into(), "fst (_, _)".into(), value_str(globals, global_offset, &a));
+            *a
+        }
         Value::VNeutral(n) => Value::VNeutral(Neutral::NFst(Box::new(n))),
         other => Value::VFst(Box::new(other)),
     }
 }
 
-pub fn do_snd(p: Value) -> Value {
+pub fn do_snd(globals: &Globals, global_offset: usize, p: Value) -> Value {
     match p {
-        Value::VPair(_, b) => *b,
+        Value::VPair(_, b) => {
+            record_step("snd-pair".into(), "snd (_, _)".into(), value_str(globals, global_offset, &b));
+            *b
+        }
         Value::VNeutral(n) => Value::VNeutral(Neutral::NSnd(Box::new(n))),
         other => Value::VSnd(Box::new(other)),
     }
@@ -343,29 +405,33 @@ pub fn do_snd(p: Value) -> Value {
 
 pub fn do_elim(motive: Value, cases: &[ElimCase], scrut: Value, env: &[Value], globals: &Globals, global_offset: usize) -> Value {
     match scrut {
-        Value::VCon(_, con, args) => match cases.iter().find(|case| case.con == con) {
+        Value::VCon(ref data, ref con, ref args) => match cases.iter().find(|case| case.con == *con) {
             Some(case) => {
-                let mut env2: Env = args.into_iter().rev().collect();
+                let mut env2: Env = args.iter().rev().cloned().collect();
                 env2.extend_from_slice(env);
-                eval_nbe(&env2, globals, global_offset, &case.body)
+                let result = eval_nbe(&env2, globals, global_offset, &case.body);
+                record_step("elim-con".into(), format!("elim _ [{}] ({} {})", con, data, con), value_str(globals, global_offset, &result));
+                result
             }
             None => Value::VElim(
                 Box::new(motive),
                 cases.to_vec(),
-                Box::new(Value::VCon("".into(), con, args)),
+                Box::new(Value::VCon("".into(), con.clone(), args.clone())),
             ),
         },
-        Value::VPCon(_, con, args, r) => match cases.iter().find(|case| case.con == con) {
+        Value::VPCon(ref data, ref con, ref args, ref r) => match cases.iter().find(|case| case.con == *con) {
             Some(case) => {
-                let mut env2: Env = args.into_iter().rev().collect();
+                let mut env2: Env = args.iter().rev().cloned().collect();
                 env2.extend_from_slice(env);
                 let body = eval_nbe(&env2, globals, global_offset, &case.body);
-                do_papp(body, *r)
+                let result = do_papp(globals, global_offset, body, (**r).clone());
+                record_step("elim-pcon".into(), format!("elim _ [{}] ({} {})", con, data, con), value_str(globals, global_offset, &result));
+                result
             }
             None => Value::VElim(
                 Box::new(motive),
                 cases.to_vec(),
-                Box::new(Value::VPCon("".into(), con, args, r)),
+                Box::new(Value::VPCon("".into(), con.clone(), args.clone(), r.clone())),
             ),
         },
         Value::VNeutral(n) => stuck_elim(motive, cases, n),
@@ -375,33 +441,47 @@ pub fn do_elim(motive: Value, cases: &[ElimCase], scrut: Value, env: &[Value], g
 
 pub fn do_transport(env: &[Value], globals: &Globals, global_offset: usize, p: Value, x: Value) -> Value {
     match p {
-        Value::VUa(e) => do_equiv_fwd(*e, x),
+        Value::VUa(e) => {
+            let result = do_equiv_fwd(globals, global_offset, *e, x);
+            record_step("transport-ua".into(), "transport (ua _) _".into(), value_str(globals, global_offset, &result));
+            result
+        }
         Value::VPLam(ref i_name, ref clos) => {
             let b0 = clos.apply_i(I::I0);
             let b1 = clos.apply_i(I::I1);
             if quote(0, globals, global_offset, b0.clone()) == quote(0, globals, global_offset, b1.clone()) {
+                record_step("transport-const".into(), "transport (λi. A) x [A constant]".into(), value_str(globals, global_offset, &x));
                 return x;
             }
 
 
             match (&b0, &b1) {
-                (Value::VUniv(_), Value::VUniv(_)) => x,
+                (Value::VUniv(_), Value::VUniv(_)) => {
+                    record_step("transport-univ".into(), "transport (λi. Univ) _".into(), value_str(globals, global_offset, &x));
+                    x
+                }
 
                 // Pi transport (non-dependent codomain only)
                 (Value::VPi(arg_name, _, _), Value::VPi(_, _, _)) => {
-                    transport_pi(env, globals, global_offset, i_name, clos, arg_name, x)
+                    let result = transport_pi(env, globals, global_offset, i_name, clos, arg_name, x);
+                    record_step("transport-pi".into(), "transport (λi. Π _ _) _".into(), value_str(globals, global_offset, &result));
+                    result
                 }
 
                 // Path transport
                 (Value::VPath(_, _, _), Value::VPath(_, _, _)) => {
-                    transport_path(env, globals, global_offset, i_name, clos, x)
+                    let result = transport_path(env, globals, global_offset, i_name, clos, x);
+                    record_step("transport-path".into(), "transport (λi. Path _ _ _) _".into(), value_str(globals, global_offset, &result));
+                    result
                 }
 
                 // Sigma transport (pair only)
                 (Value::VSigma(_, _, _), Value::VSigma(_, _, _)) => {
                     match x {
                         Value::VPair(ref a, ref b) => {
-                            transport_sigma_pair(env, globals, global_offset, i_name, clos, a, b)
+                            let result = transport_sigma_pair(env, globals, global_offset, i_name, clos, a, b);
+                            record_step("transport-sigma".into(), "transport (λi. Σ _ _) (_, _)".into(), value_str(globals, global_offset, &result));
+                            result
                         }
                         _ => Value::VTransport(Box::new(Value::VPLam("_".to_string(), clos.clone())), Box::new(x)),
                     }
@@ -891,10 +971,13 @@ pub fn transport_term_fallback(p_: Term, x_: Term) -> Term {
     }
 }
 
-pub fn do_hcomp(a_ty: Value, phi: DNF, tube: Value, base: Value) -> Value {
+pub fn do_hcomp(globals: &Globals, global_offset: usize, a_ty: Value, phi: DNF, tube: Value, base: Value) -> Value {
     if phi == dnf_top() {
-        do_papp(tube, Value::VInterval(I::I1))
+        let result = do_papp(globals, global_offset, tube, Value::VInterval(I::I1));
+        record_step("hcomp-top".into(), "hcomp A ⊤ tube base".into(), value_str(globals, global_offset, &result));
+        result
     } else if phi == dnf_bot() {
+        record_step("hcomp-bot".into(), "hcomp A ⊥ tube base".into(), value_str(globals, global_offset, &base));
         base
     } else {
         Value::VHComp(Box::new(a_ty), phi, Box::new(tube), Box::new(base))
@@ -1089,9 +1172,13 @@ pub fn nbe_eval_with_globals(t: &Term, globals: &Globals, global_offset: usize) 
     normalize(&[], globals, global_offset, t)
 }
 
-fn do_equiv_fwd(e: Value, x: Value) -> Value {
+fn do_equiv_fwd(globals: &Globals, global_offset: usize, e: Value, x: Value) -> Value {
     match e {
-        Value::VMkEquiv(_, _, f, _, _, _) => do_apply(*f, x),
+        Value::VMkEquiv(_, _, f, _, _, _) => {
+            let result = do_apply(globals, global_offset, *f, x);
+            record_step("equiv-fwd".into(), "equivFwd (mkEquiv _ _ f _ _ _) _".into(), value_str(globals, global_offset, &result));
+            result
+        }
         other => Value::VEquivFwd(Box::new(other), Box::new(x)),
     }
 }

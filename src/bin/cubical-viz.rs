@@ -3,9 +3,10 @@ use std::fs;
 use std::process;
 
 use cubical::cubical::env::{Env, apply_globals, global_ctx};
-use cubical::cubical::json::export_ast_json;
-use cubical::cubical::nbe::{Globals, Value, Neutral, eval_nbe, nbe_eval_with_globals};
+use cubical::cubical::json::{export_ast_json, export_trace_json, JsVal};
+use cubical::cubical::nbe::{Globals, Value, Neutral, eval_nbe, nbe_eval_with_globals, start_trace, stop_trace};
 use cubical::cubical::parser::{Decl, ProgramParser};
+use cubical::cubical::syntax::show_term;
 use cubical::cubical::typechecker;
 
 fn main() {
@@ -32,7 +33,6 @@ fn main() {
         }
     };
 
-    // Process all declarations using the Env, like the library does
     let mut env = Env::new();
     let mut parser = match ProgramParser::new(&source) {
         Ok(p) => p,
@@ -77,7 +77,6 @@ fn main() {
         process::exit(1);
     }
 
-    // Pick which definition to export
     let (name, ty, val) = if let Some(target) = target_name {
         match env.defs.iter().find(|(n, _, _)| n == target) {
             Some(d) => d.clone(),
@@ -97,7 +96,6 @@ fn main() {
         }
     };
 
-    // Build global values for proper normalization (handles recursion)
     let n = env.defs.len();
     let placeholder = Value::VNeutral(Neutral::NVar(0));
     let globals: Globals = std::rc::Rc::new(std::cell::RefCell::new(vec![placeholder; n]));
@@ -107,19 +105,33 @@ fn main() {
         globals.borrow_mut()[idx] = v_ev;
     }
 
+    let global_names: Vec<String> = env.defs.iter().map(|(n, _, _)| n.clone()).collect();
+
     let raw_json = export_ast_json(&val);
+    start_trace();
     let nf = nbe_eval_with_globals(&val, &globals, 0);
+    let trace = stop_trace();
     let nf_json = export_ast_json(&nf);
     let ty_json = export_ast_json(&ty);
+    let trace_json = export_trace_json(&trace);
 
     let output = format!(
         r#"{{
   "definition": "{}",
+  "rawText": {},
+  "typeText": {},
+  "normalizedText": {},
+  "trace": {},
   "type": {},
   "raw": {},
   "normalized": {}
 }}"#,
-        name, ty_json, raw_json, nf_json
+        name,
+        JsVal::Str(show_term(&global_names, &val)).to_string(),
+        JsVal::Str(show_term(&global_names, &ty)).to_string(),
+        JsVal::Str(show_term(&global_names, &nf)).to_string(),
+        trace_json,
+        ty_json, raw_json, nf_json
     );
 
     println!("{}", output);
