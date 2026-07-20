@@ -3,7 +3,7 @@
 
 pkgs.mkShell {
   buildInputs = with pkgs; [
-    python311
+    python3
     uv
   ];
 
