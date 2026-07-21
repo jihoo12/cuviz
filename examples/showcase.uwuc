@@ -191,6 +191,20 @@ def sndOfPair : Nat
   = snd natPair
 
 -- ═══════════════════════════════════════════════════════════════════
+-- UNIVERSE POLYMORPHISM
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Cumulativity: a term at U0 is accepted where U1 is expected
+-- (lambda binds A at U1, body typechecks against A)
+def idUp : (A : U1) -> A -> A
+  = \A x. x
+
+-- Datatype with explicit universe level annotation
+data Vec : U1 =
+  | vnil  : Vec
+  | vcons : Vec -> Vec
+
+-- ═══════════════════════════════════════════════════════════════════
 -- COMPUTATION STRESS TEST
 -- ═══════════════════════════════════════════════════════════════════
 
