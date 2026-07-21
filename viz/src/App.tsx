@@ -33,6 +33,15 @@ export default function App() {
     setTreeKey(k => k + 1);
   }, []);
 
+  // Auto-fetch /term.json if served (single-command workflow)
+  useEffect(() => {
+    fetch('/term.json')
+      .then(r => { if (r.ok) return r.json(); throw new Error(); })
+      .then(d => { if (d && (d.raw || d.normalized || d.type)) handleFile(d); })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

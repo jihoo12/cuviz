@@ -19,19 +19,29 @@ uwuc source ──► Rust backend ──► JSON ──► React/D3 frontend
 - Rust (edition 2024)
 - Node.js >= 18
 
-### 1. Export an AST
+### 1. Export and visualize in one step
 
 ```sh
-cargo run --bin cubical-viz -- examples/examples.uwuc main > term.json
+./serve.sh examples/examples.uwuc
 ```
 
-### 2. Visualize
+This exports the AST to `viz/public/term.json`, starts the dev server, and auto-loads the data in the browser — no drag-and-drop needed.
+
+Optionally specify a definition name:
 
 ```sh
+./serve.sh examples/examples.uwuc main
+```
+
+### 2. Manual workflow
+
+```sh
+# Export only
+cargo run --bin cubical-viz -- examples/examples.uwuc main > term.json
+
+# Open the visualizer and drag-and-drop term.json
 cd viz && npm install && npm run dev
 ```
-
-Open `http://localhost:5173` and drop `term.json` onto the page, or use the file picker.
 
 ## Language
 
