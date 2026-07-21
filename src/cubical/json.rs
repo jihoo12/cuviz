@@ -2,14 +2,18 @@ use crate::cubical::nbe::ReductionStep;
 use crate::cubical::syntax::{Name, Term, nat_to_int, show_term};
 use crate::cubical::interval::{I, DNF};
 
-/// AST node counter for generating unique ids.
-static mut NODE_ID: u32 = 0;
+use std::cell::Cell;
+
+thread_local! {
+    static NODE_ID: Cell<u32> = const { Cell::new(0) };
+}
 
 fn next_id() -> u32 {
-    unsafe {
-        NODE_ID += 1;
-        NODE_ID
-    }
+    NODE_ID.with(|id| {
+        let v = id.get() + 1;
+        id.set(v);
+        v
+    })
 }
 
 fn ast_node(kind: &str, label: &str, children: Vec<JsVal>) -> JsVal {
@@ -185,7 +189,7 @@ pub fn term_to_ast_json(t: &Term) -> JsVal {
 
 /// Reset the node ID counter (call before a new tree).
 pub fn reset_ast_ids() {
-    unsafe { NODE_ID = 0; }
+    NODE_ID.with(|id| id.set(0));
 }
 
 /// Pretty-print an interval expression for AST labels.

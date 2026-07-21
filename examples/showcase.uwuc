@@ -1,0 +1,203 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- Cubical Showcase — exercises all implemented features
+-- Run with:  cargo run --bin cubical-viz examples/showcase.uwuc
+-- ═══════════════════════════════════════════════════════════════════
+
+-- ── Basic datatypes ──────────────────────────────────────────────
+
+data Bool =
+  | true  : Bool
+  | false : Bool
+
+data Nat =
+  | zero : Nat
+  | suc  : Nat -> Nat
+
+data Unit =
+  | tt : Unit
+
+-- ── Basic functions ──────────────────────────────────────────────
+
+def not : Bool -> Bool
+  = \b. match b return Bool with
+      | true  => false
+      | false => true
+
+def add : Nat -> Nat -> Nat
+  = \m n. match m return Nat with
+      | zero  => n
+      | suc k => suc (add k n)
+
+def mul : Nat -> Nat -> Nat
+  = \m n. match m return Nat with
+      | zero  => zero
+      | suc k => add n (mul k n)
+
+def sub1 : Nat -> Nat
+  = \n. match n return Nat with
+      | zero    => zero
+      | suc k   => k
+
+def isZero : Nat -> Bool
+  = \n. match n return Bool with
+      | zero  => true
+      | suc _ => false
+
+-- ── Identity function (polymorphic) ─────────────────────────────
+
+def id : (A : U0) -> A -> A
+  = \A x. x
+
+-- ── Pair / projection helpers ───────────────────────────────────
+
+def swap : (A B : U0) -> A * B -> B * A
+  = \A B p. (snd p , fst p)
+
+def compose : (A B C : U0) -> (B -> C) -> (A -> B) -> A -> C
+  = \A B C g f x. g (f x)
+
+-- ═══════════════════════════════════════════════════════════════════
+-- PATHS
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Constant path (refl)
+def reflNat : Path Nat zero zero
+  = <i> zero
+
+-- Constant path at a constructed value
+def reflSuc : Path Nat (suc zero) (suc zero)
+  = <i> suc zero
+
+-- Path symmetry: reverse a path
+def symPath : (A : U0) -> (x y : A) -> Path A x y -> Path A y x
+  = \A x y p. <i> p @ (~ i)
+
+-- Path congruence: apply a function to a path
+def congPath : (A B : U0) -> (f : A -> B)
+            -> (x y : A) -> Path A x y -> Path B (f x) (f y)
+  = \A B f x y p. <i> f (p @ i)
+
+-- Homotopy: pointwise path between two functions
+def homotopyRefl : (A : U0) -> (f : A -> A)
+                -> ((x : A) -> Path A (f x) (f x))
+  = \A f x. <i> f x
+
+-- ═══════════════════════════════════════════════════════════════════
+-- THE CIRCLE (S1) — Higher Inductive Type
+-- ═══════════════════════════════════════════════════════════════════
+
+data S1 =
+  | base : S1
+  | loop : S1 [ base , base ]
+
+-- The loop viewed as a path
+def loopPath : Path S1 base base
+  = loop
+
+-- Reflection path at base
+def reflBase : Path S1 base base
+  = <i> base
+
+-- Evaluate loop at endpoints
+def loopAtZero : S1 = loop @ i0
+def loopAtOne  : S1 = loop @ i1
+
+-- Flip the loop (reversal)
+def flipLoop : S1 -> S1
+  = \x. match x return S1 with
+      | base   => base
+      | loop i => <i> loop @ (~ i)
+
+-- ── Match on circle: S1 → Bool ───────────────────────────────────
+
+def s1ToBool : S1 -> Bool
+  = \x. match x return Bool with
+      | base   => true
+      | loop i => <i> true
+
+-- ═══════════════════════════════════════════════════════════════════
+-- INTERVAL EXPRESSIONS
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Meet, join, negation
+def intervalCombo : I -> I -> I
+  = \i j. (i /\ j) \/ (~ i)
+
+-- Unicode version
+def intervalComboU : I -> I -> I
+  = \i j. (i ∧ j) ∨ (¬ i)
+
+-- ═══════════════════════════════════════════════════════════════════
+-- TRANSPORT
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Transport through a constant family (identity)
+def transportConst : (A : U0) -> A -> A
+  = \A a. transport (<i> A) a
+
+-- Transport through a non-constant path family
+-- (uses ua which may be expensive — uncomment to test)
+-- def transportPath : (A B : U0) -> Equiv A B -> A -> B
+--   = \A B e a. transport (<i> ua e @ i) a
+
+-- ═══════════════════════════════════════════════════════════════════
+-- DEPENDENT Pi TRANSPORT
+-- (exercises the uses_var_at_level fix)
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Non-dependent codomain: (x : A) -> B where B doesn't reference x
+-- Transport produces a function that transports each application
+def depPiNonDep : (A B : U0) -> (A -> B) -> A -> B
+  = \A B f x. transport (<i> B) (f x)
+
+-- Dependent codomain: (x : A) -> (y : B) -> x
+-- The inner Pi's codomain references the outer argument x.
+-- This exercises the fallback path in transport_pi.
+def depPiDeep : (A : U0) -> (B : U0) -> A -> B -> A
+  = \A B a b. a
+
+-- Nested dependent Pi: (x : A) -> (y : B) -> (z : C) -> x
+-- Three binders deep, codomain references the outermost.
+def depPiNested : (A B C : U0) -> A -> B -> C -> A
+  = \A B C a b c. a
+
+-- ═══════════════════════════════════════════════════════════════════
+-- EQUIVALENCE & UNVALENCE
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Identity equivalence on Bool
+def equivBoolId : Equiv Bool Bool
+  = mkEquiv Bool Bool (\b. b) (\b. b) (\b. <i> b) (\b. <i> b)
+
+-- ═══════════════════════════════════════════════════════════════════
+-- GLUE TYPES (at trivial faces)
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Glue at i0 (bottom face): same as the underlying type A
+def glueBot : (A B : U0) -> (e : Equiv A B) -> A -> A
+  = \A B e a. unglue i0 (\_. (A, e)) a
+
+-- ═══════════════════════════════════════════════════════════════════
+-- SIGMA TYPES
+-- ═══════════════════════════════════════════════════════════════════
+
+def natPair : Nat * Nat
+  = (suc zero, suc (suc zero))
+
+def fstOfPair : Nat
+  = fst natPair
+
+def sndOfPair : Nat
+  = snd natPair
+
+-- ═══════════════════════════════════════════════════════════════════
+-- COMPUTATION STRESS TEST
+-- ═══════════════════════════════════════════════════════════════════
+
+def addNat : Nat -> Nat -> Nat
+  = \m n. match m return Nat with
+      | zero  => n
+      | suc k => suc (addNat k n)
+
+-- 2 + 3 = 5
+def main : Nat = addNat (suc (suc zero)) (suc (suc (suc zero)))
