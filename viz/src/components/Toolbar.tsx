@@ -74,6 +74,16 @@ export default function Toolbar({
           <span className="header-sep" />
         </>
       )}
+
+      {data && (
+        <button
+          className={`btn${panelOpen ? ' active' : ''}`}
+          onClick={onTogglePanel}
+          title="Toggle panel (T)"
+        >
+          Panel
+        </button>
+      )}
     </header>
   );
 }

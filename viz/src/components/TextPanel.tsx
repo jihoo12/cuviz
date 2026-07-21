@@ -13,11 +13,15 @@ interface Props {
 }
 
 function renderLatex(s: string): string {
-  // Escape literal braces BEFORE converting to LaTeX, so KaTeX
-  // doesn't misinterpret eliminator syntax like { zero -> n | ... }
+  // Escape characters that break KaTeX BEFORE converting to LaTeX commands.
+  // This handles eliminator syntax like { zero -> n | suc m' -> ... }
   let tex = s
-    .replace(/\{/g, '\\{')
-    .replace(/\}/g, '\\}')
+    .replace(/\{/g, '\\lbrace ')
+    .replace(/\}/g, '\\rbrace ')
+    .replace(/\[/g, '\\lbrack ')
+    .replace(/\]/g, '\\rbrack ')
+    .replace(/\|/g, '\\mid ')
+    .replace(/->/g, '\\to ')
     .replace(/→/g, '\\to ')
     .replace(/λ/g, '\\lambda ')
     .replace(/Π/g, '\\Pi ')
@@ -35,8 +39,9 @@ function renderLatex(s: string): string {
     .replace(/𝕀/g, '\\mathbb{I}')
     .replace(/@/g, '\\,{:}\\,')
     .replace(/U(\d+)/g, '\\mathcal{U}_{$1}')
-    .replace(/(\w+)_(\w+)/g, '$1\\_{$2}')
-    // lambda body arrow
+    .replace(/⟨/g, '\\langle ')
+    .replace(/⟩/g, '\\rangle ')
+    .replace(/_/g, '\\_ ')
     .replace(/\. /g, '\\,.');
 
   try {
