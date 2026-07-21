@@ -377,6 +377,26 @@ pub fn do_papp(globals: &Globals, global_offset: usize, p: Value, r: Value) -> V
             ),
         },
         Value::VNeutral(n) => Value::VNeutral(Neutral::NPApp(Box::new(n), Box::new(r))),
+        // hcomp boundary reduction: (hcomp A φ tube base) @ 0 = base
+        //                           (hcomp A φ tube base) @ 1 = tube @ 1
+        Value::VHComp(a, phi, tube, base) => {
+            if let Some(endpoint) = value_to_endpoint(&r) {
+                match endpoint {
+                    I::I0 => {
+                        record_step("hcomp-papp-0".into(), "hcomp _ _ _ _ @ 0".into(), value_str(globals, global_offset, &base));
+                        *base
+                    }
+                    I::I1 => {
+                        let result = do_papp(globals, global_offset, *tube, Value::VInterval(I::I1));
+                        record_step("hcomp-papp-1".into(), "hcomp _ _ _ _ @ 1".into(), value_str(globals, global_offset, &result));
+                        result
+                    }
+                    _ => Value::VPApp(Box::new(Value::VHComp(a, phi, tube, base)), Box::new(r)),
+                }
+            } else {
+                Value::VPApp(Box::new(Value::VHComp(a, phi, tube, base)), Box::new(r))
+            }
+        },
         other => Value::VPApp(Box::new(other), Box::new(r)),
     }
 }
@@ -520,36 +540,38 @@ fn apply_non_dep(clos: &Closure) -> Value {
     clos.apply(Value::VInterval(I::I0))
 }
 
-/// Check whether a term references the first de Bruijn variable (index 0).
-fn uses_tvar_0(t: &Term) -> bool {
+/// Check whether a term references de Bruijn variable at the given level,
+/// correctly tracking binder depth. Under each binder, the target variable's
+/// de Bruijn index increases by 1.
+pub fn uses_var_at_level(t: &Term, level: i32) -> bool {
     match t {
-        Term::TVar(i) => *i == 0,
-        Term::TApp(f, a) => uses_tvar_0(f) || uses_tvar_0(a),
-        Term::TAbs(_, b) => uses_tvar_0(b),
-        Term::TPi(_, a, b) => uses_tvar_0(a) || uses_tvar_0(b),
-        Term::TPath(a, u, v) => uses_tvar_0(a) || uses_tvar_0(u) || uses_tvar_0(v),
-        Term::PLam(_, b) => uses_tvar_0(b),
-        Term::PApp(p, r) => uses_tvar_0(p) || uses_tvar_0(r),
-        Term::THComp(a, phi, u, u0) => uses_tvar_0(a) || uses_tvar_0(phi) || uses_tvar_0(u) || uses_tvar_0(u0),
-        Term::TEquiv(a, b) => uses_tvar_0(a) || uses_tvar_0(b),
+        Term::TVar(i) => *i == level,
+        Term::TApp(f, a) => uses_var_at_level(f, level) || uses_var_at_level(a, level),
+        Term::TAbs(_, b) => uses_var_at_level(b, level + 1),
+        Term::TPi(_, a, b) => uses_var_at_level(a, level) || uses_var_at_level(b, level + 1),
+        Term::TPath(a, u, v) => uses_var_at_level(a, level) || uses_var_at_level(u, level) || uses_var_at_level(v, level),
+        Term::PLam(_, b) => uses_var_at_level(b, level + 1),
+        Term::PApp(p, r) => uses_var_at_level(p, level) || uses_var_at_level(r, level),
+        Term::THComp(a, phi, u, u0) => uses_var_at_level(a, level) || uses_var_at_level(phi, level) || uses_var_at_level(u, level) || uses_var_at_level(u0, level),
+        Term::TEquiv(a, b) => uses_var_at_level(a, level) || uses_var_at_level(b, level),
         Term::TMkEquiv(a, b, f, g, eta, eps) => {
-            uses_tvar_0(a) || uses_tvar_0(b) || uses_tvar_0(f) || uses_tvar_0(g) || uses_tvar_0(eta) || uses_tvar_0(eps)
+            uses_var_at_level(a, level) || uses_var_at_level(b, level) || uses_var_at_level(f, level) || uses_var_at_level(g, level) || uses_var_at_level(eta, level) || uses_var_at_level(eps, level)
         }
-        Term::TEquivFwd(e, x) => uses_tvar_0(e) || uses_tvar_0(x),
-        Term::TUa(e) => uses_tvar_0(e),
-        Term::TTransport(p, x) => uses_tvar_0(p) || uses_tvar_0(x),
-        Term::TGlue(a, phi, te) => uses_tvar_0(a) || uses_tvar_0(phi) || uses_tvar_0(te),
-        Term::TGlueElem(phi, t, a) => uses_tvar_0(phi) || uses_tvar_0(t) || uses_tvar_0(a),
-        Term::TUnglue(phi, te, g) => uses_tvar_0(phi) || uses_tvar_0(te) || uses_tvar_0(g),
-        Term::TSigma(_, a, b) => uses_tvar_0(a) || uses_tvar_0(b),
-        Term::TPair(a, b) => uses_tvar_0(a) || uses_tvar_0(b),
-        Term::TFst(p) => uses_tvar_0(p),
-        Term::TSnd(p) => uses_tvar_0(p),
+        Term::TEquivFwd(e, x) => uses_var_at_level(e, level) || uses_var_at_level(x, level),
+        Term::TUa(e) => uses_var_at_level(e, level),
+        Term::TTransport(p, x) => uses_var_at_level(p, level) || uses_var_at_level(x, level),
+        Term::TGlue(a, phi, te) => uses_var_at_level(a, level) || uses_var_at_level(phi, level) || uses_var_at_level(te, level),
+        Term::TGlueElem(phi, t, a) => uses_var_at_level(phi, level) || uses_var_at_level(t, level) || uses_var_at_level(a, level),
+        Term::TUnglue(phi, te, g) => uses_var_at_level(phi, level) || uses_var_at_level(te, level) || uses_var_at_level(g, level),
+        Term::TSigma(_, a, b) => uses_var_at_level(a, level) || uses_var_at_level(b, level + 1),
+        Term::TPair(a, b) => uses_var_at_level(a, level) || uses_var_at_level(b, level),
+        Term::TFst(p) => uses_var_at_level(p, level),
+        Term::TSnd(p) => uses_var_at_level(p, level),
         Term::TUniv(_) | Term::TIntervalTy | Term::TInterval(_) | Term::TCube(_) | Term::TData(_) => false,
-        Term::TCon(_, _, args) => args.iter().any(uses_tvar_0),
-        Term::TPCon(_, _, args, r) => args.iter().any(uses_tvar_0) || uses_tvar_0(r),
+        Term::TCon(_, _, args) => args.iter().any(|a| uses_var_at_level(a, level)),
+        Term::TPCon(_, _, args, r) => args.iter().any(|a| uses_var_at_level(a, level)) || uses_var_at_level(r, level),
         Term::TElim(motive, cases, scrut) => {
-            uses_tvar_0(motive) || uses_tvar_0(scrut) || cases.iter().any(|c| uses_tvar_0(&c.body))
+            uses_var_at_level(motive, level) || uses_var_at_level(scrut, level) || cases.iter().any(|c| uses_var_at_level(&c.body, level + 1))
         }
     }
 }
@@ -565,7 +587,7 @@ fn transport_pi(env: &[Value], globals: &Globals, global_offset: usize, i_name: 
         ),
     };
 
-    if !uses_tvar_0(&cod_clos.body) {
+    if !uses_var_at_level(&cod_clos.body, 0i32) {
         let b_val = apply_non_dep(cod_clos);
         let b_body = shift(1, 1, &quote(formal_env.len(), globals, global_offset, b_val));
         let b_fam = Term::PLam(i_name.to_string(), Box::new(b_body));
@@ -660,7 +682,7 @@ fn transport_sigma_pair(
     Value::VPair(Box::new(a_prime), Box::new(b_prime))
 }
 
-/// Transport through Glue types (phi=bot or phi=top).
+/// Transport through Glue types.
 fn transport_glue(
     env: &[Value],
     globals: &Globals,
@@ -696,7 +718,34 @@ fn transport_glue(
             Box::new(quote(env.len(), globals, global_offset, x.clone())),
         )))
     } else {
-        None
+        // Non-trivial face: decompose glue elements using the cubical Glue transport rule.
+        // transp (λi. Glue A [φ] te) (glue [φ] t a)
+        //   = glue [φ] t (hcomp A [φ] (λi. t) a)
+        // where t stays the same (constant equiv domain) and the base is composed
+        // via hcomp to maintain the boundary condition on face φ.
+        match x {
+            Value::VGlueElem(phi_elem, t, a) if *phi_elem == *phi0 => {
+                let (_, glue_at_var) = eval_body_at_formal_interval(env, globals, global_offset, clos);
+                let a_ty = match &glue_at_var {
+                    Value::VGlue(a, _, _) => *a.clone(),
+                    _ => return None,
+                };
+
+                // tube = λi. t  (constant tube in hcomp)
+                let t_body = shift(1, 0, &quote(env.len(), globals, global_offset, *t.clone()));
+                let tube = Term::PLam(i_name.to_string(), Box::new(t_body));
+                let tube_val = eval_nbe(env, globals, global_offset, &tube);
+
+                let hcomp_val = do_hcomp(globals, global_offset, a_ty, phi0.clone(), tube_val, *a.clone());
+
+                Some(Value::VGlueElem(
+                    phi0.clone(),
+                    t.clone(),
+                    Box::new(hcomp_val),
+                ))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -956,7 +1005,27 @@ pub fn transport_term_fallback(p_: Term, x_: Term) -> Term {
                             Box::new(x_),
                         ))
                     } else {
-                        Term::TTransport(Box::new(Term::PLam(i_name, body.clone())), Box::new(x_))
+                        // Non-trivial face: if x_ is a GlueElem with matching face, decompose.
+                        match &x_ {
+                            Term::TGlueElem(phi_elem, t, a) if nbe_eval(phi0) == nbe_eval(phi_elem) => {
+                                let a_ty = match nbe_eval(&beta(&shift(1, 0, body), &Term::TVar(0))) {
+                                    Term::TGlue(a, _, _) => *a,
+                                    other => other,
+                                };
+                                let tube = Term::PLam(
+                                    i_name.clone(),
+                                    Box::new(shift(1, 0, &*t)),
+                                );
+                                let hcomp = Term::THComp(
+                                    Box::new(a_ty),
+                                    phi0.clone(),
+                                    Box::new(tube),
+                                    (*a).clone(),
+                                );
+                                Term::TGlueElem(phi0.clone(), t.clone(), Box::new(hcomp))
+                            }
+                            _ => Term::TTransport(Box::new(Term::PLam(i_name, body.clone())), Box::new(x_)),
+                        }
                     }
                 }
 
@@ -1241,6 +1310,8 @@ fn level_to_var(size: usize, level: usize) -> Term {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cubical::interval::Literal;
+    use std::collections::BTreeSet;
 
     fn b(t: Term) -> Box<Term> {
         Box::new(t)
@@ -1358,5 +1429,173 @@ mod tests {
             "expected TAbs (native Pi transport), got: {}",
             crate::cubical::syntax::show_term(&[], &result)
         );
+    }
+
+    #[test]
+    fn dependent_codomain_pi_transport_reduces() {
+        // Family: λi. (x : i x) → (y : U) → x
+        // The codomain (y:U) → x depends on x (the Pi argument), so this
+        // exercises the dependent Pi transport code path.
+        let body = Term::TPi(
+            "x".to_string(),
+            b(Term::TApp(b(Term::TVar(1)), b(Term::TVar(0)))),
+            b(Term::TPi(
+                "y".to_string(),
+                b(Term::TUniv(0)),
+                b(Term::TVar(1)),
+            )),
+        );
+        let fam = Term::PLam("i".to_string(), b(body));
+        let arg = Term::TAbs(
+            "x".to_string(),
+            b(Term::TAbs("y".to_string(), b(Term::TVar(1)))),
+        );
+        let term = Term::TTransport(b(fam), b(arg));
+        let result = nbe_eval(&term);
+        assert!(
+            !matches!(&result, Term::TTransport(_, _)),
+            "dependent Pi transport should reduce, got stuck: {}",
+            crate::cubical::syntax::show_term(&[], &result)
+        );
+        assert!(
+            matches!(&result, Term::TAbs(_, _)),
+            "expected TAbs, got: {}",
+            crate::cubical::syntax::show_term(&[], &result)
+        );
+    }
+
+    #[test]
+    fn hcomp_papp_at_zero_reduces_to_base() {
+        // hcomp A (i0) tube base @ 0 should reduce to base
+        // (non-trivial face keeps hcomp stuck until papp)
+        let tube = Term::PLam("j".to_string(), b(Term::TUniv(0)));
+        let hcomp = Term::THComp(
+            b(Term::TUniv(0)),
+            b(Term::TInterval(I::Var(0))),
+            b(tube),
+            b(Term::TUniv(1)),
+        );
+        let term = Term::PApp(b(hcomp), b(Term::TInterval(I::I0)));
+        let result = nbe_eval(&term);
+        assert_eq!(result, Term::TUniv(1));
+    }
+
+    #[test]
+    fn hcomp_papp_at_one_reduces_to_tube_at_one() {
+        // hcomp A (i0) tube base @ 1 should reduce to tube @ 1
+        let tube = Term::PLam("j".to_string(), b(Term::TUniv(0)));
+        let hcomp = Term::THComp(
+            b(Term::TUniv(0)),
+            b(Term::TInterval(I::Var(0))),
+            b(tube),
+            b(Term::TUniv(1)),
+        );
+        let term = Term::PApp(b(hcomp), b(Term::TInterval(I::I1)));
+        let result = nbe_eval(&term);
+        assert_eq!(result, Term::TUniv(0));
+    }
+
+    #[test]
+    fn glue_transport_on_glue_elem_decomposes() {
+        // transport (λi. Glue (TVar(i)) [phi] te) (glue [phi] cap base)
+        // where phi is non-trivial constant (Pos(1) — different from transport var)
+        // A = TVar(0) varies with i (VInterval(I::I0) at i=0, VInterval(I::I1) at i=1)
+        // so the family is non-constant and transport_glue is reached.
+        //
+        // Result: glue [phi] cap (hcomp A_type [phi] (λi. cap) base)
+        let non_trivial_phi = Term::TCube(DNF {
+            cubes: BTreeSet::from([BTreeSet::from([Literal::Pos(1)])]),
+        });
+        let glue_ty = Term::TGlue(
+            b(Term::TVar(0)),         // A varies with i → makes family non-constant
+            b(non_trivial_phi.clone()),
+            b(Term::TUniv(0)),        // te
+        );
+        let fam = Term::PLam("i".to_string(), b(glue_ty));
+        let cap = Term::TUniv(1);
+        let base = Term::TUniv(2);
+        let glue_elem = Term::TGlueElem(
+            b(non_trivial_phi.clone()),
+            b(cap),
+            b(base),
+        );
+        let transport = Term::TTransport(b(fam), b(glue_elem));
+        let globals: Globals = Rc::new(RefCell::new(Vec::new()));
+        let result = eval_nbe(&[], &globals, 0, &transport);
+        let phi_dnf = DNF {
+            cubes: BTreeSet::from([BTreeSet::from([Literal::Pos(1)])]),
+        };
+        match result {
+            Value::VGlueElem(phi, t, a) => {
+                assert_eq!(phi, phi_dnf, "face should be the non-trivial phi");
+                match *t {
+                    Value::VUniv(n) => assert_eq!(n, 1, "cap should be U1"),
+                    other => panic!("expected VUniv(1) for cap, got: {:?}", other),
+                }
+                match *a {
+                    Value::VHComp(_, h_phi, _, h_base) => {
+                        assert_eq!(h_phi, phi_dnf, "hcomp face should match");
+                        match *h_base {
+                            Value::VUniv(n) => assert_eq!(n, 2, "hcomp base should be U2"),
+                            other => panic!("expected VUniv(2) for hcomp base, got: {:?}", other),
+                        }
+                    }
+                    other => panic!("expected VHComp, got: {:?}", other),
+                }
+            }
+            other => panic!("expected VGlueElem, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn glue_transport_on_non_glue_elem_stays_stuck() {
+        // transport (λi. Glue (TVar(i)) [phi] te) U0
+        // A varies → family non-constant, but input is not GlueElem → stuck
+        let non_trivial_phi = Term::TCube(DNF {
+            cubes: BTreeSet::from([BTreeSet::from([Literal::Pos(1)])]),
+        });
+        let glue_ty = Term::TGlue(
+            b(Term::TVar(0)),
+            b(non_trivial_phi),
+            b(Term::TUniv(0)),
+        );
+        let fam = Term::PLam("i".to_string(), b(glue_ty));
+        let transport = Term::TTransport(b(fam), b(Term::TUniv(0)));
+        let globals: Globals = Rc::new(RefCell::new(Vec::new()));
+        let result = eval_nbe(&[], &globals, 0, &transport);
+        match result {
+            Value::VTransport(_, _) => {}
+            other => panic!("expected stuck VTransport, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn glue_transport_face_mismatch_stays_stuck() {
+        // transport (λi. Glue (TVar(i)) [phi1] te) (glue [phi2] cap base)
+        // phi1 != phi2 → decomposition fails → stuck
+        let phi1 = Term::TCube(DNF {
+            cubes: BTreeSet::from([BTreeSet::from([Literal::Pos(1)])]),
+        });
+        let phi2 = Term::TCube(DNF {
+            cubes: BTreeSet::from([BTreeSet::from([Literal::NegVar(1)])]),
+        });
+        let glue_ty = Term::TGlue(
+            b(Term::TVar(0)),
+            b(phi1),
+            b(Term::TUniv(0)),
+        );
+        let fam = Term::PLam("i".to_string(), b(glue_ty));
+        let glue_elem = Term::TGlueElem(
+            b(phi2),
+            b(Term::TUniv(1)),
+            b(Term::TUniv(2)),
+        );
+        let transport = Term::TTransport(b(fam), b(glue_elem));
+        let globals: Globals = Rc::new(RefCell::new(Vec::new()));
+        let result = eval_nbe(&[], &globals, 0, &transport);
+        match result {
+            Value::VTransport(_, _) => {}
+            other => panic!("expected stuck VTransport on face mismatch, got: {:?}", other),
+        }
     }
 }
