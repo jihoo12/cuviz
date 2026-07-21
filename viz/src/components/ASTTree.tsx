@@ -217,7 +217,7 @@ const ASTTree = forwardRef<ASTTreeHandle, Props>(({ data, searchQuery, onNodeHov
       rootRef.current.children.forEach(collapse);
     }
     updateTree(rootRef.current);
-    setTimeout(fitView, 100);
+    setTimeout(fitView, 400);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
