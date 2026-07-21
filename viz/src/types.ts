@@ -22,4 +22,19 @@ export interface ASTData {
   normalized: ASTNode;
 }
 
-export type View = 'normalized' | 'raw' | 'type';
+export type View = 'normalized' | 'raw' | 'type' | 'geometry';
+
+export type GeoKind =
+  | 'interval'
+  | 'path'
+  | 'square'
+  | 'hit'
+  | 'transport'
+  | 'equiv'
+  | 'fallback';
+
+export interface GeoDiagram {
+  kind: GeoKind;
+  node: ASTNode;
+  label: string;
+}

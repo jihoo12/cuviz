@@ -1,0 +1,10 @@
+{
+  "definition": "loopPath",
+  "rawText": "loop",
+  "typeText": "Path S1 base base",
+  "normalizedText": "loop",
+  "trace": [],
+  "type": {"id":4,"kind":"Path","label":"Path _ _ _","children":[{"id":1,"kind":"Data","label":"S1","children":[]},{"id":2,"kind":"Con","label":"base","children":[]},{"id":3,"kind":"Con","label":"base","children":[]}]},
+  "raw": {"id":1,"kind":"Con","label":"loop","children":[]},
+  "normalized": {"id":1,"kind":"Con","label":"loop","children":[]}
+}

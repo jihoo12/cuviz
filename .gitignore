@@ -3,3 +3,4 @@
 .code-review-graph/
 .venv
 viz/node_modules
+viz/dist

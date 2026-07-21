@@ -1,0 +1,10 @@
+{
+  "definition": "symPath",
+  "rawText": "λA. λx. λy. λp. ⟨i⟩ p @ ¬i0",
+  "typeText": "Π(A:U0). Π(x:A). Π(y:A). Π(_:Path A x y). Path A y x",
+  "normalizedText": "λA. λx. λy. λp. ⟨i⟩ p @ ¬i0",
+  "trace": [],
+  "type": {"id":15,"kind":"Pi","label":"Π(A: _). _","children":[{"id":1,"kind":"Univ","label":"U0","children":[]},{"id":14,"kind":"Pi","label":"Π(x: _). _","children":[{"id":2,"kind":"Var","label":"#0","children":[]},{"id":13,"kind":"Pi","label":"Π(y: _). _","children":[{"id":3,"kind":"Var","label":"#1","children":[]},{"id":12,"kind":"Pi","label":"Π(_: _). _","children":[{"id":7,"kind":"Path","label":"Path _ _ _","children":[{"id":4,"kind":"Var","label":"#2","children":[]},{"id":5,"kind":"Var","label":"#1","children":[]},{"id":6,"kind":"Var","label":"#0","children":[]}]},{"id":11,"kind":"Path","label":"Path _ _ _","children":[{"id":8,"kind":"Var","label":"#3","children":[]},{"id":9,"kind":"Var","label":"#1","children":[]},{"id":10,"kind":"Var","label":"#2","children":[]}]}]}]}]}]},
+  "raw": {"id":8,"kind":"Abs","label":"λA","children":[{"id":7,"kind":"Abs","label":"λx","children":[{"id":6,"kind":"Abs","label":"λy","children":[{"id":5,"kind":"Abs","label":"λp","children":[{"id":4,"kind":"PLam","label":"⟨i⟩ _","children":[{"id":3,"kind":"PApp","label":"_ @ _","children":[{"id":1,"kind":"Var","label":"#1","children":[]},{"id":2,"kind":"Interval","label":"¬i0","children":[]}]}]}]}]}]}]},
+  "normalized": {"id":8,"kind":"Abs","label":"λA","children":[{"id":7,"kind":"Abs","label":"λx","children":[{"id":6,"kind":"Abs","label":"λy","children":[{"id":5,"kind":"Abs","label":"λp","children":[{"id":4,"kind":"PLam","label":"⟨i⟩ _","children":[{"id":3,"kind":"PApp","label":"_ @ _","children":[{"id":1,"kind":"Var","label":"#1","children":[]},{"id":2,"kind":"Interval","label":"¬i0","children":[]}]}]}]}]}]}]}
+}

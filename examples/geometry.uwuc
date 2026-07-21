@@ -1,0 +1,111 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- Geometric & Topological Visualization Examples
+-- Open in cuviz, then click the "geometry" tab (or press 4)
+-- ═══════════════════════════════════════════════════════════════════
+
+-- ── Basic types ─────────────────────────────────────────────────
+
+data Bool =
+  | true  : Bool
+  | false : Bool
+
+data Nat =
+  | zero : Nat
+  | suc  : Nat -> Nat
+
+-- ── 1. The Interval I ──────────────────────────────────────────
+-- The abstract interval [0,1] with meet (∧), join (∨), negation (¬).
+
+def myInterval : I -> I -> I
+  = \i j. (i /\ j) \/ (~ i)
+
+-- ── 2. The Circle (S1) — Higher Inductive Type ─────────────────
+-- base : S1                       (point constructor)
+-- loop : Path S1 base base        (path constructor — a loop!)
+
+data S1 =
+  | base : S1
+  | loop : S1 [ base , base ]
+
+-- Reflexivity path at base (constant path)
+def reflBase : Path S1 base base
+  = <i> base
+
+-- The loop itself, viewed as a path
+def loopPath : Path S1 base base
+  = loop
+
+-- ── 3. Path Types ──────────────────────────────────────────────
+-- A path between two points.  Path A a b is a continuous "wire"
+-- from a to b living in type A.
+
+-- Constant path (like refl)
+def constPath : Path Nat zero zero
+  = <i> zero
+
+-- Path at suc zero
+def sucPath : Path Nat (suc zero) (suc zero)
+  = <i> suc zero
+
+-- Path application: evaluate a path at an endpoint
+def loopAtStart : S1
+  = loop @ i0
+
+def loopAtEnd : S1
+  = loop @ i1
+
+-- ── 4. Path Algebra — Symmetry ─────────────────────────────────
+-- Given a path from x to y, produce a path from y to x.
+-- Geometrically: reverse the curve.
+
+def symPath : (A : Type) -> (x y : A) -> Path A x y -> Path A y x
+  = \A x y p. <i> p @ (~ i)
+
+-- ── 5. Path Algebra — Congruence ───────────────────────────────
+-- Apply a function to a path (map a function over a path).
+
+def congPath : (A B : Type) -> (f : A -> B)
+            -> (x y : A) -> Path A x y -> Path B (f x) (f y)
+  = \A B f x y p. <i> f (p @ i)
+
+-- ── 6. Transport ───────────────────────────────────────────────
+-- Move a value along a path in a type family.
+
+def transportExample : (A B : Type) -> Equiv A B -> A -> B
+  = \A B e a. transport (<i> ua e @ i) a
+
+-- ── 7. Equivalence & Univalence ────────────────────────────────
+-- An equivalence between types induces a path between types.
+
+def equivId : Equiv Bool Bool
+  = mkEquiv Bool Bool
+      (\b. b)
+      (\b. b)
+      (\b. <i> b)
+      (\b. <i> b)
+
+-- ── 8. Match on path constructor (circle → bool) ───────────────
+
+def s1ToBool : S1 -> Bool
+  = \x. match x return Bool with
+      | base    => true
+      | loop i  => <i> true
+
+-- ── 9. Sigma types (pairs) ─────────────────────────────────────
+
+def natPair : Nat * Nat
+  = (suc zero, suc (suc zero))
+
+def fstOfPair : Nat
+  = fst natPair
+
+-- ── 10. Homotopy (pointwise path between functions) ────────────
+
+def homotopyRefl : (A : Type) -> (f : A -> A)
+                -> ((x : A) -> Path A (f x) (f x))
+  = \A f x. <i> f x
+
+-- ── main ────────────────────────────────────────────────────────
+
+def main : Nat
+  = suc (suc (suc zero))

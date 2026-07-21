@@ -9,11 +9,15 @@ interface Props {
   onPanelTabChange: (tab: 'text' | 'trace') => void;
   activeStep: number | null;
   onSelectStep: (idx: number | null) => void;
+  panelOpen: boolean;
 }
 
 function renderLatex(s: string): string {
-  // Convert common patterns to LaTeX
+  // Escape literal braces BEFORE converting to LaTeX, so KaTeX
+  // doesn't misinterpret eliminator syntax like { zero -> n | ... }
   let tex = s
+    .replace(/\{/g, '\\{')
+    .replace(/\}/g, '\\}')
     .replace(/→/g, '\\to ')
     .replace(/λ/g, '\\lambda ')
     .replace(/Π/g, '\\Pi ')
@@ -46,7 +50,7 @@ function escHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export default function TextPanel({ data, panelTab, onPanelTabChange, activeStep, onSelectStep }: Props) {
+export default function TextPanel({ data, panelTab, onPanelTabChange, activeStep, onSelectStep, panelOpen }: Props) {
   const traceSteps = data?.trace ?? [];
 
   const textContent = useMemo(() => {
@@ -59,7 +63,7 @@ export default function TextPanel({ data, panelTab, onPanelTabChange, activeStep
 
   if (!data) {
     return (
-      <div className="right-panel">
+      <div className={`right-panel${panelOpen ? '' : ' collapsed'}`}>
         <div className="panel-body">
           <div className="text-section-label" style={{ textAlign: 'center', marginTop: 40, color: 'var(--text-muted)' }}>
             No data loaded
@@ -70,7 +74,7 @@ export default function TextPanel({ data, panelTab, onPanelTabChange, activeStep
   }
 
   return (
-    <div className="right-panel">
+    <div className={`right-panel${panelOpen ? '' : ' collapsed'}`}>
       <div className="panel-tabs">
         <button
           className={`panel-tab${panelTab === 'text' ? ' active' : ''}`}

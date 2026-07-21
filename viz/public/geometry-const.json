@@ -1,0 +1,10 @@
+{
+  "definition": "constPath",
+  "rawText": "⟨i⟩ 0",
+  "typeText": "Path Nat 0 0",
+  "normalizedText": "⟨i⟩ 0",
+  "trace": [],
+  "type": {"id":4,"kind":"Path","label":"Path _ _ _","children":[{"id":1,"kind":"Data","label":"Nat","children":[]},{"id":2,"kind":"Con","label":"zero","children":[]},{"id":3,"kind":"Con","label":"zero","children":[]}]},
+  "raw": {"id":2,"kind":"PLam","label":"⟨i⟩ _","children":[{"id":1,"kind":"Con","label":"zero","children":[]}]},
+  "normalized": {"id":2,"kind":"PLam","label":"⟨i⟩ _","children":[{"id":1,"kind":"Con","label":"zero","children":[]}]}
+}

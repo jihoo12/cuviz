@@ -36,7 +36,7 @@ export default function Toolbar({
           <span className="header-sep" />
 
           <div className="tab-bar">
-            {(['normalized', 'raw', 'type'] as View[]).map(v => (
+            {(['normalized', 'raw', 'type', 'geometry'] as View[]).map(v => (
               <button
                 key={v}
                 className={`tab${view === v ? ' active' : ''}`}
@@ -53,7 +53,7 @@ export default function Toolbar({
 
       <div className="header-spacer" />
 
-      {data && (
+      {data && view !== 'geometry' && (
         <>
           <input
             className="search-box"
@@ -62,7 +62,7 @@ export default function Toolbar({
             value={searchQuery}
             onChange={e => onSearchChange(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Escape') { onSearchChange(''); (e.target as HTMLInputElement).blur(); }
+              if (e.key === 'Escape') { onSearchChange(''); (e.target as HTMLInputElement)?.blur(); }
             }}
           />
           {searchCount > 0 && <span className="search-count">{searchCount} match{searchCount !== 1 ? 'es' : ''}</span>}
@@ -72,14 +72,6 @@ export default function Toolbar({
           <button className="btn btn-icon" onClick={onCollapse} title="Collapse all (C)">⊖</button>
 
           <span className="header-sep" />
-
-          <button
-            className={`btn${panelOpen ? ' active' : ''}`}
-            onClick={onTogglePanel}
-            title="Toggle panel (T)"
-          >
-            Panel
-          </button>
         </>
       )}
     </header>

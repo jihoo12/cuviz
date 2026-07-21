@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { ASTData, View } from './types';
 import ASTTree, { type ASTTreeHandle } from './components/ASTTree';
+import GeometryView, { type GeometryViewHandle } from './components/GeometryView';
 import TextPanel from './components/TextPanel';
 import Toolbar from './components/Toolbar';
 import DropZone from './components/DropZone';
@@ -15,6 +16,7 @@ export default function App() {
   const [treeKey, setTreeKey] = useState(0);
   const [hoverNode, setHoverNode] = useState<string | null>(null);
   const treeRef = useRef<ASTTreeHandle>(null);
+  const geoRef = useRef<GeometryViewHandle>(null);
 
   const handleFile = useCallback((raw: unknown) => {
     const d = raw as ASTData;
@@ -42,6 +44,7 @@ export default function App() {
       if (e.key === '1') handleViewChange('normalized');
       if (e.key === '2') handleViewChange('raw');
       if (e.key === '3') handleViewChange('type');
+      if (e.key === '4') handleViewChange('geometry');
       if (e.key === 'Escape') setSearchQuery('');
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
@@ -79,7 +82,8 @@ export default function App() {
     document.body.removeChild(input);
   }, [handleFile]);
 
-  const treeData = data ? data[view] : null;
+  const treeData = data ? (view === 'geometry' ? null : data[view]) : null;
+  const isGeo = view === 'geometry';
 
   return (
     <div className="app">
@@ -90,7 +94,7 @@ export default function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenFile={openFileDialog}
-        onFit={() => treeRef.current?.fitView()}
+        onFit={() => isGeo ? geoRef.current?.fitView() : treeRef.current?.fitView()}
         onExpand={() => treeRef.current?.expandAll()}
         onCollapse={() => treeRef.current?.collapseAll()}
         panelOpen={panelOpen}
@@ -99,13 +103,21 @@ export default function App() {
 
       <div className="main-area">
         <div className="tree-container">
-          <ASTTree
-            key={treeKey}
-            ref={treeRef}
-            data={treeData}
-            searchQuery={searchQuery}
-            onNodeHover={node => setHoverNode(node?.label ?? null)}
-          />
+          {isGeo ? (
+            <GeometryView
+              key={treeKey}
+              ref={geoRef}
+              data={data?.raw ?? data?.normalized ?? data?.type ?? null}
+            />
+          ) : (
+            <ASTTree
+              key={treeKey}
+              ref={treeRef}
+              data={treeData}
+              searchQuery={searchQuery}
+              onNodeHover={node => setHoverNode(node?.label ?? null)}
+            />
+          )}
           <div id="zoom-info" className={`zoom-info${!panelOpen ? ' panel-collapsed' : ''}`}>x1.00</div>
         </div>
 
@@ -116,6 +128,7 @@ export default function App() {
             onPanelTabChange={setPanelTab}
             activeStep={activeStep}
             onSelectStep={setActiveStep}
+            panelOpen={panelOpen}
           />
         )}
       </div>

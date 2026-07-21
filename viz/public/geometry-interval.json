@@ -1,0 +1,10 @@
+{
+  "definition": "myInterval",
+  "rawText": "λi. λj. ((i1 ∧ i0) ∨ ¬i1)",
+  "typeText": "Π(_:𝕀). Π(_:𝕀). 𝕀",
+  "normalizedText": "λi. λj. ((i1 ∧ i0) ∨ ¬i1)",
+  "trace": [],
+  "type": {"id":5,"kind":"Pi","label":"Π(_: _). _","children":[{"id":1,"kind":"IntervalTy","label":"𝕀","children":[]},{"id":4,"kind":"Pi","label":"Π(_: _). _","children":[{"id":2,"kind":"IntervalTy","label":"𝕀","children":[]},{"id":3,"kind":"IntervalTy","label":"𝕀","children":[]}]}]},
+  "raw": {"id":3,"kind":"Abs","label":"λi","children":[{"id":2,"kind":"Abs","label":"λj","children":[{"id":1,"kind":"Interval","label":"((i1 ∧ i0) ∨ ¬i1)","children":[]}]}]},
+  "normalized": {"id":3,"kind":"Abs","label":"λi","children":[{"id":2,"kind":"Abs","label":"λj","children":[{"id":1,"kind":"Interval","label":"((i1 ∧ i0) ∨ ¬i1)","children":[]}]}]}
+}
